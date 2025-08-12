@@ -1,3 +1,4 @@
+# [Readme中文](https://github.com/svipfun/VPigeonBot/releases/tag/Readme中文)
 # VPigeonBot
 
 VPigeonBot is a Telegram bot designed to forward messages from users to a designated owner and allow the owner to reply to users by responding to forwarded messages. It includes features for blocking/unblocking users and managing message mappings via a SQLite database.
