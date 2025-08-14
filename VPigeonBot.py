@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 # 替换为您的实际值
 TOKEN = '自行获取'  # 从 BotFather 获取
-OWNER_ID = 自行获取  # 您的 Telegram User ID，从 @userinfobot 获取
+OWNER_ID = 自行获取  # 您的 Telegram User ID，从 @userinfobot 获取 为纯数字
 
 # 数据库文件
 DB_FILE = 'VPigeonBot.db'
@@ -189,9 +189,9 @@ async def message_handler(update: Update, context: CallbackContext):
                 logger.info(f"转发消息成功，映射: {forwarded.message_id} -> {chat_id}")
         except Exception as e:
             logger.error(f"转发失败: {e}")
-
+"""
 def main():
-    """主函数，启动机器人"""
+    主函数 启动机器人
     init_db()  # 初始化数据库
     application = Application.builder().token(TOKEN).build()
 
@@ -206,6 +206,29 @@ def main():
 
     # 本地测试用 polling，服务器部署可改为 webhook
     application.run_polling()
+"""
 
+def main():
+    """主函数 启动机器人"""
+    init_db()  # 初始化数据库
+    application = Application.builder().token(TOKEN).build()
+
+    # 添加处理器
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help))
+    application.add_handler(CommandHandler("block", block))
+    application.add_handler(CommandHandler("unblock", unblock))
+    application.add_handler(CommandHandler("listblocked", listblocked))
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, message_handler))
+
+    # 配置 webhook
+    application.run_webhook(
+        listen="0.0.0.0",  # 监听所有接口
+        port=8443,        # 本地监听端口，与 Nginx 配置的 proxy_pass 一致
+        url_path="/webhook",  # webhook 路径
+        webhook_url="https://yourdomain.com/webhook",  # 完整的外部 URL
+        cert="/etc/letsencrypt/live/yourdomain.com/fullchain.pem",  # SSL 证书路径
+        key="/etc/letsencrypt/live/yourdomain.com/privkey.pem"     # SSL 私钥路径
+    )
 if __name__ == '__main__':
     main()
