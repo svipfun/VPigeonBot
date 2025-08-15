@@ -88,7 +88,7 @@ Nginx acts as a reverse proxy, forwarding HTTPS requests to the Bot’s local po
          ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
 
          location /webhook {
-             proxy_pass http://127.0.0.1:8443/webhook;
+             proxy_pass https://127.0.0.1:8443/webhook;
              proxy_set_header Host $host;
              proxy_set_header X-Real-IP $remote_addr;
              proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
