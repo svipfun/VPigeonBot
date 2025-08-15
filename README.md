@@ -118,8 +118,7 @@ Nginx acts as a reverse proxy, forwarding HTTPS requests to the Bot’s local po
 2. **Upload Code**:
    - Clone from GitHub (if uploaded):
      ```
-     git clone https://github.com/your-username/VPigeonBot.git
-     mv VPigeonBot/VPigeonBot.py .
+     git clone https://github.com/svipfun/VPigeonBot.git /root/VPigeonBot
      ```
    - Or upload locally:
      ```
