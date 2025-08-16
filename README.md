@@ -269,3 +269,183 @@ Use Systemd for persistent operation.
 - **Backup**: Regularly back up the database (`/root/VPigeonBot/VPigeonBot.db`).
 - **Case Sensitivity**: Linux is case-sensitive; always use `VPigeonBot.py` (uppercase).
 - **Domain**: Ensure `yourdomain.com` resolves to the server’s public IP (`ping yourdomain.com`).
+---
+
+# Telegram Webhook Auto-Start Configuration
+
+- This document outlines the optimized method to ensure a Telegram bot's Webhook is automatically registered on VPS boot using a Systemd service. The solution includes DNS and HTTPS pre-checks to ensure network stability before registration.
+
+## Prerequisites
+
+- A Debian-based VPS with root access.
+- `curl` and `ping` installed (`sudo apt install -y curl iputils-ping`).
+- A Telegram bot token and a valid Webhook URL (e.g., `https://<YOUR_DOMAIN>/webhook`).
+- Write permissions for `/var/log/webhook_register.log`.
+
+## Steps to Configure Auto-Start
+
+### 1. Create the Registration Script
+
+Create a shell script to handle Webhook registration with pre-checks.
+
+- **Command**:
+  ```bash
+  sudo nano /usr/local/bin/register_webhook.sh
+  ```
+
+- **Content**:
+  ```bash
+  #!/bin/bash
+
+  log() {
+      echo "$(date) - $1" >> /var/log/webhook_register.log
+  }
+
+  # Wait for DNS resolution
+  log "Checking DNS resolution for <YOUR_DOMAIN>..."
+  max_dns_attempts=10
+  attempt=1
+  until ping -c4 <YOUR_DOMAIN> &>/dev/null; do
+      if [ $attempt -ge $max_dns_attempts ]; then
+          log "DNS resolution failed after $max_dns_attempts attempts."
+          exit 1
+      fi
+      log "DNS resolution failed, waiting 5 seconds (Attempt $attempt/$max_dns_attempts)..."
+      sleep 5
+      ((attempt++))
+  done
+  log "DNS resolution successful."
+
+  # Wait for HTTPS availability
+  log "Checking HTTPS availability for https://<YOUR_DOMAIN>..."
+  max_https_attempts=10
+  attempt=1
+  until curl -s -k https://<YOUR_DOMAIN> &>/dev/null; do
+      if [ $attempt -ge $max_https_attempts ]; then
+          log "HTTPS check failed after $max_https_attempts attempts."
+          exit 1
+      fi
+      log "HTTPS check failed, waiting 5 seconds (Attempt $attempt/$max_https_attempts)..."
+      sleep 5
+      ((attempt++))
+  done
+  log "HTTPS availability confirmed."
+
+  # Delete existing webhook
+  log "Deleting existing webhook..."
+  curl -X POST -s https://api.telegram.org/bot<YOUR_BOT_TOKEN>/deleteWebhook
+
+  # Attempt to set webhook with retry logic
+  log "Attempting to set webhook..."
+  for i in {1..5}; do
+      response=$(curl -X POST -s https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=https://<YOUR_DOMAIN>/webhook)
+      log "Attempt $i - Response: $response"
+      if [[ "$response" == *"\"ok\":true"* ]]; then
+          log "Webhook registration successful."
+          exit 0
+      elif [[ "$response" == *"\"error_code\":429"* ]]; then
+          delay=$((2 ** i))
+          log "Rate limited, waiting $delay seconds..."
+          sleep $delay
+      elif [[ "$response" == *"Failed to resolve host"* ]]; then
+          log "DNS resolution failed during attempt, waiting 10 seconds..."
+          sleep 10
+      else
+          log "Webhook registration failed."
+          exit 1
+      fi
+  done
+  log "Webhook registration failed after 5 attempts."
+  exit 1
+  ```
+
+- **Permissions**:
+  ```bash
+  sudo chmod +x /usr/local/bin/register_webhook.sh
+  ```
+
+- **Test the Script**:
+  ```bash
+  /usr/local/bin/register_webhook.sh
+  cat /var/log/webhook_register.log
+  ```
+
+### 2. Create the Systemd Service
+
+Create a Systemd service to run the script on boot.
+
+- **Command**:
+  ```bash
+  sudo nano /etc/systemd/system/register_webhook.service
+  ```
+
+- **Content**:
+  ```ini
+  [Unit]
+  Description=Register Telegram Webhook on Boot
+  After=network-online.target
+  Wants=network-online.target
+
+  [Service]
+  Type=oneshot
+  ExecStart=/usr/local/bin/register_webhook.sh
+  RemainAfterExit=true
+  TimeoutStartSec=300
+
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+- **Apply Changes**:
+  ```bash
+  sudo systemctl daemon-reload
+  sudo systemctl enable register_webhook.service
+  sudo systemctl start register_webhook.service
+  ```
+
+### 3. Verify and Test
+
+- **Check Service Status**:
+  ```bash
+  sudo systemctl status register_webhook.service
+  ```
+
+- **View Logs**:
+  ```bash
+  cat /var/log/webhook_register.log
+  ```
+
+- **Test Reboot**:
+  ```bash
+  sudo reboot
+  ```
+  - After reboot, verify:
+    ```bash
+    cat /var/log/webhook_register.log
+    curl https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo
+    ```
+  - Expected output: `{"ok":true,"result":{"url":"https://<YOUR_DOMAIN>/webhook",...}}` with no `last_error_message`.
+
+### 4. Troubleshooting
+
+- **DNS/HTTPS Check Fails**:
+  - Increase `max_dns_attempts` or `max_https_attempts` in the script.
+  - Check network configuration (`ping <YOUR_DOMAIN>`).
+
+- **Rate Limit (429)**:
+  - The exponential backoff (2s, 4s, 8s, 16s, 32s) should handle this. Avoid manual restarts during the 5-minute window after a 429.
+
+- **Service Fails to Start**:
+  - Check logs: `journalctl -xeu register_webhook.service`.
+  - Ensure script permissions and dependencies (`curl`, `ping`).
+
+### Notes
+- Replace `<YOUR_DOMAIN>` with your actual domain (e.g., `yourdomain.com`) and `<YOUR_BOT_TOKEN>` with your Telegram bot token.
+- Log file `/var/log/webhook_register.log` must exist and be writable:
+  ```bash
+  sudo touch /var/log/webhook_register.log
+  sudo chmod 644 /var/log/webhook_register.log
+  ```
+
+This configuration has been tested and confirmed to work as of August 16, 2025, ensuring the Telegram bot operates flawlessly post-reboot.
+```
